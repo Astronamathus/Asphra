@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My First 3D Scene</title>
+  <style>
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+  <script>
+    // 1. Create scene
+    const scene = new THREE.Scene();
+
+    // 2. Create camera
+    const camera = new THREE.PerspectiveCamera(
+      75, // field of view
+      window.innerWidth / window.innerHeight, // aspect ratio
+      0.1, // near clipping
+      1000 // far clipping
+    );
+
+    // 3. Create renderer
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // 4. Create a cube
+    const geometry = new THREE.BoxGeometry();
+    const material = new THREE.MeshNormalMaterial({ color: 0x00ff00 });
+    const cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+
+    // 5. Position camera
+    camera.position.z = 10;
+
+    // 6. Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Rotate cube
+      cube.rotation.x += 0.01;
+      cube.rotation.y += 0.01;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>

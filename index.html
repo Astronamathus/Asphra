@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My First 3D Scene</title>
+  <title>Asphra</title>
   <style>
     body { margin: 0; }
   </style>
@@ -11,6 +11,7 @@
   <script>
     // 1. Create scene
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
 
     // 2. Create camera
     const camera = new THREE.PerspectiveCamera(
@@ -35,15 +36,29 @@
     clearcoatRoughness: 0.1 // Roughness of the clear coat layer, from 0.0 to 1.0
     });
     const cube = new THREE.Mesh(geometry, material);
+    cube.position.y = 0.5;
     scene.add(cube);
 
-    //Ground
-    const groundGeometry = new THREE.PlaneGeometry(50, 50);
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2; // make it flat
-    ground.position.y = -1;
-    scene.add(ground);
+    //Road
+    const roadGeometry = new THREE.PlaneGeometry(10, 200); // narrow & long
+    const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 }); // grey
+
+    const road = new THREE.Mesh(roadGeometry, roadMaterial);
+
+    road.rotation.x = -Math.PI / 2;
+    road.position.y = -1;
+    
+    scene.add(road);
+
+    //Lane Splitter
+    const lineGeometry = new THREE.PlaneGeometry(0.2, 200);
+    const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    const line = new THREE.Mesh(lineGeometry, lineMaterial);
+
+    line.rotation.x = -Math.PI / 2;
+    line.position.y = -0.99; // slightly above road
+    scene.add(line);
 
     // Lighting
     const light = new THREE.PointLight(0xffffff, 5);

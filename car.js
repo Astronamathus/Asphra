@@ -2,6 +2,8 @@ let turnLeft = false;
 let turnRight = false;
 let moveForward = false;
 let moveBackward = false;
+let boost = false;
+let handbrake = false;
 
 // Physics
 let turnSpeed = 0;
@@ -20,6 +22,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") turnRight = true;
   if (e.key === "ArrowUp") moveForward = true;
   if (e.key === "ArrowDown") moveBackward = true;
+  if (e.key === "Shift") boost = true;
+  if (e.key === " ") handbrake = true;
 });
 
 document.addEventListener("keyup", (e) => {
@@ -27,6 +31,8 @@ document.addEventListener("keyup", (e) => {
   if (e.key === "ArrowRight") turnRight = false;
   if (e.key === "ArrowUp") moveForward = false;
   if (e.key === "ArrowDown") moveBackward = false;
+  if (e.key === "Shift") boost = false;
+  if (e.key === " ") handbrake = false;
 });
 
 // Create car
@@ -61,8 +67,12 @@ function updateCar(cube) {
 
   // Acceleration
   if (moveForward) velocity += acceleration;
+  if (boost) velocity += acceleration;
   if (moveBackward) velocity -= brakeForce;
-
+  if (handbrake) {
+    while (velocity >= 0){
+       velocity -= brakeForce;}
+    } 
   velocity = Math.max(-0.3, Math.min(maxSpeed, velocity));
   velocity *= friction;
 

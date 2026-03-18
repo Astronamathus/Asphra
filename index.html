@@ -29,7 +29,7 @@
     // 4. Create a cube
     const geometry = new THREE.BoxGeometry();
     const material = new THREE.MeshPhysicalMaterial({
-    color: 0x008080, // Color of the material
+    color: 0xFFFF00, // Color of the material
     metalness: 0.5, // How metallic the surface is, from 0.0 to 1.0
     roughness: 0.2, // How rough the surface is, from 0.0 to 1.0
     clearcoat: 1.0, // Intensity of the clear coat layer, from 0.0 to 1.0
@@ -70,6 +70,12 @@
     //Movement
     let turnLeft = false;
     let turnRight = false;
+
+        //Turning mechanics
+        let turnSpeed = 0;
+        let maxTurn = 0.04;
+        let turnAccel = 0.002;
+
     let moveForward = false;
     let moveBackward = false;
     
@@ -101,12 +107,27 @@
       requestAnimationFrame(animate);
 
       // Cube movement
-      let speed = 0.1;
-      if (turnLeft) cube.rotation.y += 0.03;
-      if (turnRight) cube.rotation.y -= 0.03;
-      if (moveForward) cube.position.x += Math.sin(cube.rotation.y) * speed;
-      if (moveBackward) cube.position.z -= Math.cos(cube.rotation.y) * speed;
+      let speed = 0.2;
+      // accelerate turning
+      if (turnLeft) turnSpeed -= turnAccel;
+      if (turnRight) turnSpeed += turnAccel;
+      // limit turning speed
+      turnSpeed = Math.max(-maxTurn, Math.min(maxTurn, turnSpeed));
+      // friction (this makes it gentle)
+      turnSpeed *= 0.9;
+      // apply rotation
+      cube.rotation.y += turnSpeed;
+      cube.rotation.z = -turnSpeed * 5;
+      // forward/backward movement
+      if (moveForward) {
+        cube.position.x += Math.sin(cube.rotation.y) * speed;
+        cube.position.z -= Math.cos(cube.rotation.y) * speed;
+      }
 
+      if (moveBackward) {
+        cube.position.x -= Math.sin(cube.rotation.y) * speed;
+        cube.position.z += Math.cos(cube.rotation.y) * speed;
+      }
 
       //Camera follow
       let distance = 8; // how far behind
@@ -117,17 +138,16 @@
       let targetZ = cube.position.z + Math.cos(cube.rotation.y) * distance;
       let targetY = cube.position.y + height;
 
-      // Smooth movement (THIS is the key part)
+      // Smooth movement 
       camera.position.x += (targetX - camera.position.x) * 0.1;
       camera.position.y += (targetY - camera.position.y) * 0.1;
       camera.position.z += (targetZ - camera.position.z) * 0.1;
 
 
-      camera.lookAt(
-        cube.position.x,
-        cube.position.y + 1,
-        cube.position.z
-      );
+      let lookX = cube.position.x + Math.sin(cube.rotation.y);
+      let lookZ = cube.position.z - Math.cos(cube.rotation.y);
+
+      camera.lookAt(lookX, cube.position.y, lookZ);
 
       renderer.render(scene, camera);
     }

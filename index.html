@@ -68,23 +68,23 @@
     scene.add(ambientLight);
     
     //Movement
-    let moveLeft = false;
-    let moveRight = false;
+    let turnLeft = false;
+    let turnRight = false;
     let moveForward = false;
     let moveBackward = false;
     
     //Controls
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowLeft") moveLeft = true;
-      if (e.key === "ArrowRight") moveRight = true;
+      if (e.key === "ArrowLeft") turnLeft = true;
+  if (e.key === "ArrowRight") turnRight = true;
       if (e.key === "ArrowUp") moveForward = true;
       if (e.key === "ArrowDown") moveBackward = true;
     });
 
-    document.addEventListener("keyup", (e) => {
-      if (e.key === "ArrowLeft") moveLeft = false;
-      if (e.key === "ArrowRight") moveRight = false;
+    document.addEventListener("keyup", (e) => {    
+      if (e.key === "ArrowLeft") turnLeft = false;
+      if (e.key === "ArrowRight") turnRight = false;
       if (e.key === "ArrowUp") moveForward = false;
       if (e.key === "ArrowDown") moveBackward = false;
     });
@@ -102,17 +102,32 @@
 
       // Cube movement
       let speed = 0.1;
-      if (moveLeft) cube.position.x -= speed;
-      if (moveRight) cube.position.x += speed;
-      if (moveForward) cube.position.z -= speed;
-      if (moveBackward) cube.position.z += speed;
+      if (turnLeft) cube.rotation.y += 0.03;
+      if (turnRight) cube.rotation.y -= 0.03;
+      if (moveForward) cube.position.x += Math.sin(cube.rotation.y) * speed;
+      if (moveBackward) cube.position.z -= Math.cos(cube.rotation.y) * speed;
 
 
       //Camera follow
-      camera.position.x += (cube.position.x - camera.position.x) * 0.1;
-      camera.position.y += (cube.position.y + 3 - camera.position.y) * 0.1;
-      camera.position.z += (cube.position.z + 8 - camera.position.z) * 0.1;
-      camera.lookAt(cube.position);
+      let distance = 8; // how far behind
+      let height = 3;   // how high
+
+      // Calculate target position (behind cube)
+      let targetX = cube.position.x - Math.sin(cube.rotation.y) * distance;
+      let targetZ = cube.position.z + Math.cos(cube.rotation.y) * distance;
+      let targetY = cube.position.y + height;
+
+      // Smooth movement (THIS is the key part)
+      camera.position.x += (targetX - camera.position.x) * 0.1;
+      camera.position.y += (targetY - camera.position.y) * 0.1;
+      camera.position.z += (targetZ - camera.position.z) * 0.1;
+
+
+      camera.lookAt(
+        cube.position.x,
+        cube.position.y + 1,
+        cube.position.z
+      );
 
       renderer.render(scene, camera);
     }

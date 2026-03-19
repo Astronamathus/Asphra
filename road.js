@@ -1,12 +1,13 @@
 let roadSegments = [];
 let segmentLength = 20;
 let visibleSegments = 10;
+let currentAngle = 0; // direction of road
 
 let roadMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
 
 function createRoad(scene) {
   for (let i = 0; i < visibleSegments; i++) {
-    addSegment(scene, i * segmentLength);
+    addSegment(scene);
   }
 }
 
@@ -15,29 +16,36 @@ function addSegment(scene, zPos) {
   const segment = new THREE.Mesh(geometry, roadMaterial);
 
   segment.rotation.x = -Math.PI / 2;
-  segment.position.y = -1;
-  segment.position.z = -zPos;
+
+  // RANDOM TURN (small)
+  let turn = (Math.random() - 0.5) * 0.2; // adjust intensity here
+  currentAngle += turn;
+
+  // Position relative to last segment
+  if (roadSegments.length === 0) {
+    segment.position.set(0, -1, 0);
+  } else {
+    const last = roadSegments[roadSegments.length - 1];
+
+    const dx = Math.sin(currentAngle) * segmentLength;
+    const dz = Math.cos(currentAngle) * segmentLength;
+
+    segment.position.x = last.position.x + dx;
+    segment.position.z = last.position.z - dz;
+    segment.position.y = -1;
+  }
+
+  // Rotate segment to match curve
+  segment.rotation.y = currentAngle;
 
   scene.add(segment);
   roadSegments.push(segment);
+
   createLaneDashes(segment);
 }
-function updateRoad(scene, car) {
-  let firstSegment = roadSegments[0];
-  let lastSegment = roadSegments[roadSegments.length - 1];
-
-  // If car has moved forward enough
-  if (car.position.z < lastSegment.position.z + segmentLength * 5) {
-    
-    // Add new segment ahead
-    addSegment(scene, -lastSegment.position.z + segmentLength);
-
-    // Remove old segment behind
-    scene.remove(firstSegment);
-    roadSegments.shift();
-  }
-}
   function createLaneDashes(parentSegment) {
+  // Remove old dashes if any
+  parentSegment.children = [];
   const dashLength = 3;
   const gap = 1;
 
@@ -48,18 +56,27 @@ function updateRoad(scene, car) {
     const dash = new THREE.Mesh(dashGeometry, dashMaterial);
     dash.rotation.z = Math.PI / 2;
 
-    dash.position.set(0, 0.01, i);
-
-    // Center of road (lane divider)
-    dash.position.x = 0;
-
-    // Slightly above road to avoid flicker
-    dash.position.y = 0;
-
-    // Position along the segment
-    dash.position.z = i;
+    dash.position.set(0, -0.99, i);
 
     // Attach to segment (IMPORTANT)
     parentSegment.add(dash);
+  }
+}
+function updateRoad(scene, car) {
+  if (roadSegments.length === 0) return;
+
+  let first = roadSegments[0];
+  let last = roadSegments[roadSegments.length - 1];
+
+  // Distance between car and last segment
+  let dist = car.position.distanceTo(last.position);
+
+  if (dist < segmentLength * 5) {
+    // Add new segment ahead
+    addSegment(scene);
+
+    // Remove old segment behind
+    scene.remove(first);
+    roadSegments.shift();
   }
 }

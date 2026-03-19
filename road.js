@@ -1,8 +1,8 @@
 let roadSegments = [];
-let segmentLength = 20;
+let segmentLength = 5;
 let visibleSegments = 10;
 let currentAngle = 0; // direction of road
-
+let visualAngle = 0;
 let roadMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
 
 function createRoad(scene) {
@@ -20,7 +20,7 @@ function addSegment(scene, zPos) {
   // RANDOM TURN (small)
   let turn = (Math.random() - 0.5) * 0.2; // adjust intensity here
   currentAngle += turn;
-
+  visualAngle += (currentAngle - visualAngle) * 0.1;
   // Position relative to last segment
   if (roadSegments.length === 0) {
     segment.position.set(0, -1, 0);
@@ -32,11 +32,9 @@ function addSegment(scene, zPos) {
 
     segment.position.x = last.position.x + dx;
     segment.position.z = last.position.z - dz;
+
     segment.position.y = -1;
   }
-
-  // Rotate segment to match curve
-  segment.rotation.y = currentAngle;
 
   scene.add(segment);
   roadSegments.push(segment);
@@ -44,8 +42,11 @@ function addSegment(scene, zPos) {
   createLaneDashes(segment);
 }
   function createLaneDashes(parentSegment) {
-  // Remove old dashes if any
-  parentSegment.children = [];
+  // Properly clear old dashes
+  while (parentSegment.children.length > 0) {
+    parentSegment.remove(parentSegment.children[0]);
+  }
+
   const dashLength = 3;
   const gap = 1;
 
@@ -54,11 +55,14 @@ function addSegment(scene, zPos) {
 
   for (let i = -segmentLength / 2; i < segmentLength / 2; i += dashLength + gap) {
     const dash = new THREE.Mesh(dashGeometry, dashMaterial);
-    dash.rotation.z = Math.PI / 2;
 
+    // Lay flat
+    dash.rotation.z = -Math.PI / 2;
+    dash.rotation.y = visualAngle;
+
+    // Position along segment (local)
     dash.position.set(0, -0.99, i);
 
-    // Attach to segment (IMPORTANT)
     parentSegment.add(dash);
   }
 }

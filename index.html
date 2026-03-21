@@ -44,10 +44,17 @@ let brakeForce = 0.02;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
+const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+const groundMat = new THREE.MeshBasicMaterial({ color: 0x228B22 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
 
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -2;
+
+scene.add(ground);
 // Camera (basic, real logic in camera.js)
 const camera = new THREE.PerspectiveCamera(
-  75,
+  100,
   window.innerWidth / window.innerHeight,
   0.1,
   1000

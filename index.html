@@ -15,8 +15,11 @@ let currentAngle = 0; // direction of road
 let visualAngle = 0;
 let currentHeight = -1;     // starting height
 let targetSlope = 0;        // slope direction
-let roadMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
-
+let roadMaterial = new THREE.MeshStandardMaterial({
+  color: 0x333333,
+  roughness: 0.9,
+  metalness: 0.1
+});
 let turnLeft = false;
 let turnRight = false;
 let moveForward = false;
@@ -27,7 +30,7 @@ let handbrake = false;
 // Physics
 let turnSpeed = 0;
 let targetY = 0;
-let maxTurn = 0.04;
+let maxTurn = 0.03;
 let turnAccel = 0.002;
 
 let velocity = 0;
@@ -74,7 +77,7 @@ function addSegment(scene, zPos) {
 
   // RANDOM TURN (small)
   let turn = (Math.random() - 0.5) * 0.2; // adjust intensity here
-  currentAngle += turn;
+  currentAngle += turn;;
   visualAngle += (currentAngle - visualAngle) * 0.1;
   // Position relative to last segment
   if (roadSegments.length === 0) {
@@ -197,14 +200,15 @@ function updateCar(cube) {
   if (turnRight) turnSpeed += turnAccel;
 
   turnSpeed = Math.max(-maxTurn, Math.min(maxTurn, turnSpeed));
-  turnSpeed *= 0.9;
+  turnSpeed *= 0.85;
 
   cube.rotation.y += turnSpeed;
   cube.rotation.z = -turnSpeed * 5;
 
   // Acceleration
   if (moveForward) velocity += acceleration;
-  if (boost) velocity += acceleration;
+  if (boost) velocity += acceleration * 0.5;
+  velocity = Math.max(-0.3, Math.min(maxSpeed * 1.5, velocity));
   if (moveBackward) velocity -= brakeForce;
   if (handbrake) {
     if (velocity >= 0){
@@ -234,6 +238,9 @@ function updateCar(cube) {
 
   if (closest) {
     targetY = closest.position.y + 0.5;
+
+    // Match road tilt
+    cube.rotation.x += (closest.rotation.x + Math.PI / 2 - cube.rotation.x) * 0.1;
   }
 
   // Movement
@@ -244,13 +251,16 @@ function updateCar(cube) {
 function updateCamera(camera, cube) {
   let distance = 8;
   let height = 3;
+  let speedFactor = Math.abs(velocity) * 2;
 
+  let dynamicDistance = distance + speedFactor;
+  let dynamicHeight = height + speedFactor * 0.3;
     // Smooth follow
     cube.position.y += (targetY - cube.position.y) * 0.2;
 
-  let targetX = cube.position.x - Math.sin(cube.rotation.y) * distance;
-  let targetZ = cube.position.z + Math.cos(cube.rotation.y) * distance;
-  targetY = cube.position.y + height;
+  let targetX = cube.position.x - Math.sin(cube.rotation.y) * dynamicDistance;
+  let targetZ = cube.position.z + Math.cos(cube.rotation.y) * dynamicDistance;
+  targetY = cube.position.y + dynamicHeight;
 
 
   // Smooth follow
@@ -286,6 +296,9 @@ function animate() {
   updateCamera(camera, car);
 
   renderer.render(scene, camera);
+  renderer.shadowMap.enabled = true;
+  light.castShadow = true;
+  car.castShadow = true;
 }
 
 animate();</script>

@@ -27,6 +27,9 @@ let moveBackward = false;
 let boost = false;
 let handbrake = false;
 
+let roadOffset = 0;
+let targetOffset = 0;
+
 // Physics
 let turnSpeed = 0;
 let targetY = 0;
@@ -76,21 +79,32 @@ function addSegment(scene, zPos) {
   segment.rotation.x = -Math.PI / 2;
 
   // RANDOM TURN (small)
-  let turn = (Math.random() - 0.5) * 0.2; // adjust intensity here
-  currentAngle += turn;;
-  visualAngle += (currentAngle - visualAngle) * 0.1;
+  
   // Position relative to last segment
   if (roadSegments.length === 0) {
     segment.position.set(0, -1, 0);
   } else {
     const last = roadSegments[roadSegments.length - 1];
 
-    const dx = Math.sin(currentAngle) * segmentLength;
-    const dz = Math.cos(currentAngle) * segmentLength;
+    let shift = (Math.random() - 0.5) * 2; // how sharp turns feel
 
-    segment.position.x = last.position.x + dx;
-    segment.position.z = last.position.z - dz;
+    segment.position.x = last.position.x + shift;
+    segment.position.z = last.position.z - segmentLength;
 
+    // Occasionally change direction
+    if (Math.random() < 0.3) {
+      targetOffset += (Math.random() - 0.5) * 5;
+    }
+
+    // Clamp so road doesn't drift infinitely
+    targetOffset = Math.max(-10, Math.min(10, targetOffset));
+
+    // Smooth transition
+    roadOffset += (targetOffset - roadOffset) * 0.1;
+
+    segment.position.x = last.position.x + roadOffset;
+    segment.position.z = last.position.z - segmentLength;
+    
     // RANDOM SLOPE CHANGE (gentle)
     let slopeChange = (Math.random() - 0.5) * 0.02;
     targetSlope += slopeChange;
@@ -109,6 +123,8 @@ function addSegment(scene, zPos) {
   roadSegments.push(segment);
 
   createLaneDashes(segment);
+
+  createBarriers(segment);
 }
   function createLaneDashes(parentSegment) {
   // Properly clear old dashes
@@ -155,6 +171,30 @@ function updateRoad(scene, car) {
   }
 }
 
+//Barriers
+function createBarriers(segment) {
+  const barrierHeight = 1;
+  const barrierWidth = 0.3;
+  const roadWidth = 10;
+
+  const geometry = new THREE.BoxGeometry(barrierWidth, barrierHeight, segmentLength);
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+  // LEFT barrier
+  const leftBarrier = new THREE.Mesh(geometry, material);
+  leftBarrier.position.set(-roadWidth / 2, barrierHeight / 2, 0);
+
+  // RIGHT barrier
+  const rightBarrier = new THREE.Mesh(geometry, material);
+  rightBarrier.position.set(roadWidth / 2, barrierHeight / 2, 0);
+
+  // Match road tilt (IMPORTANT)
+  leftBarrier.rotation.x = segment.rotation.x;
+  rightBarrier.rotation.x = segment.rotation.x;
+
+  segment.add(leftBarrier);
+  segment.add(rightBarrier);
+}
 
 // Controls
 document.addEventListener("keydown", (e) => {
@@ -279,6 +319,7 @@ function updateCamera(camera, cube) {
 
 // Fog
 scene.fog = new THREE.Fog(0x111111, 10, 50);
+
 
 // Create systems
 createRoad(scene);

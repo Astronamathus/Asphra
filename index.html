@@ -74,6 +74,7 @@ scene.add(light);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
 scene.add(ambientLight);
 
+//Creating Road for car to drive on
 function createRoad(scene) {
   for (let i = 0; i < visibleSegments; i++) {
     addSegment(scene);
@@ -107,13 +108,13 @@ function addSegment(scene, zPos) {
     // Clamp so road doesn't drift infinitely
     targetOffset = Math.max(-10, Math.min(10, targetOffset));
 
-    // Smooth transition
+    // Smooth transition of road change
     roadOffset += (targetOffset - roadOffset) * 0.1;
 
     segment.position.x = last.position.x + roadOffset;
     segment.position.z = last.position.z - segmentLength;
     
-    // RANDOM SLOPE CHANGE (gentle)
+    // RANDOM SLOPE CHANGE (gentle) elevation variation
     let slopeChange = (Math.random() - 0.5) * 0.02;
     targetSlope += slopeChange;
 
@@ -325,7 +326,7 @@ function updateCamera(camera, cube) {
 }
 
 
-// Fog
+// Fog for depth
 scene.fog = new THREE.Fog(0x111111, 10, 50);
 
 

@@ -43,7 +43,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x5aa9e6);
 scene.fog = new THREE.FogExp2(0x5aa9e6, 0.02);
 const groundGeo = new THREE.PlaneGeometry(1000, 1000);
-const groundMat = new THREE.MeshBasicMaterial({ color: 0x228B22 });
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 
 ground.rotation.x = -Math.PI / 2;
@@ -132,17 +132,54 @@ function addSegment(scene) {
     0
   );
 
-  createLaneDashes(segment);
-  createBarriers(segment);
+  // --- SNAP (tiny precision fix for seams) ---
+  segment.position.x = parseFloat(segment.position.x.toFixed(4));
+  segment.position.z = parseFloat(segment.position.z.toFixed(4));
+
+  scene.add(segment);
+  roadSegments.push(segment);
+
+  function createTerrain(segment) 
+  {
+    const geo = new THREE.PlaneGeometry(30, segmentLength + 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+
+    const terrain = new THREE.Mesh(geo, mat);
+
+    terrain.rotation.x = segment.rotation.x;
+    terrain.rotation.y = segment.rotation.y;
+
+    terrain.position.y = -0.3;
+    segment.add(terrain);
+  }
+  const skirtGeo = new THREE.BoxGeometry(0.5, 5, segmentLength);
+
+  const leftSkirt = new THREE.Mesh(skirtGeo, groundMat);
+  leftSkirt.position.set(-5.5, -2.5, 0);
+
+  const rightSkirt = new THREE.Mesh(skirtGeo, groundMat);
+  rightSkirt.position.set(5.5, -2.5, 0);
+  segment.add(leftSkirt);
+  segment.add(rightSkirt);
+
+  function addTrees(segment) 
+  {
+    const treeGeo = new THREE.ConeGeometry(0.5, 2, 6);
+    const treeMat = new THREE.MeshStandardMaterial({ color: 0x0b6623 });
+
+    const tree = new THREE.Mesh(treeGeo, treeMat);
+
+    tree.position.x = (Math.random() < 0.5 ? -8 : 8);
+    segment.add(tree);
+  }
+
   createTerrain(segment);
+  createBarriers(segment);
+  createLaneDashes(segment);
+  addTrees(segment);
 }
   function createLaneDashes(parentSegment) 
   {
-  // Properly clear old dashes
-  while (parentSegment.children.length > 0) 
-  {
-    parentSegment.remove(parentSegment.children[0]);
-  }
 
   const dashLength = 3;
   const gap = 1;

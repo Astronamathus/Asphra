@@ -39,7 +39,6 @@ let acceleration = 0.01;
 let friction = 0.98;
 let brakeForce = 0.02;
 
-//Add scene details and depth
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x5aa9e6);
 scene.fog = new THREE.FogExp2(0x5aa9e6, 0.02);
@@ -151,17 +150,23 @@ function addSegment(scene) {
     terrain.rotation.y = segment.rotation.y;
 
     terrain.position.y = -0.3;
+    terrain.position.z = 0;
+    terrain.position.x = 0;
     segment.add(terrain);
   }
-  const skirtGeo = new THREE.BoxGeometry(0.5, 5, segmentLength);
+ const sideGeo = new THREE.PlaneGeometry(10, segmentLength + 1);
+ const sideMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
 
-  const leftSkirt = new THREE.Mesh(skirtGeo, groundMat);
-  leftSkirt.position.set(-5.5, -2.5, 0);
+ const leftSide = new THREE.Mesh(sideGeo, sideMat);
+ leftSide.rotation.x = -Math.PI / 2;
+ leftSide.position.set(-10, -0.5, 0);
 
-  const rightSkirt = new THREE.Mesh(skirtGeo, groundMat);
-  rightSkirt.position.set(5.5, -2.5, 0);
-  segment.add(leftSkirt);
-  segment.add(rightSkirt);
+ const rightSide = new THREE.Mesh(sideGeo, sideMat);
+ rightSide.rotation.x = -Math.PI / 2;
+ rightSide.position.set(10, -0.5, 0);
+
+ segment.add(leftSide);
+ segment.add(rightSide);
 
   function addTrees(segment) 
   {
@@ -171,6 +176,7 @@ function addSegment(scene) {
     const tree = new THREE.Mesh(treeGeo, treeMat);
 
     tree.position.x = (Math.random() < 0.5 ? -8 : 8);
+    tree.position.y = 1; // half height
     segment.add(tree);
   }
 
@@ -350,12 +356,11 @@ function updateCamera(camera, cube) {
 
   let targetX = cube.position.x - Math.sin(cube.rotation.y) * dynamicDistance;
   let targetZ = cube.position.z + Math.cos(cube.rotation.y) * dynamicDistance;
-  targetY = cube.position.y + dynamicHeight;
-
+  let camTargetY = cube.position.y + dynamicHeight;
 
   // Smooth follow
   camera.position.x += (targetX - camera.position.x) * 0.1;
-  camera.position.y += (targetY - camera.position.y) * 0.1;
+  camera.position.y += (camTargetY - camera.position.y) * 0.1;
   camera.position.z += (targetZ - camera.position.z) * 0.1;
 
   // Look forward (not center)

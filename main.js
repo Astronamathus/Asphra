@@ -9,6 +9,10 @@ const SHOULDER_WIDTH = 4;
 const DRAW_DISTANCE = 6;
 const TREE_COUNT = 34;
 const TERRAIN_SEED = 187.31;
+const MAX_SPEED = 64;
+const MAX_ACCEL = 7;
+const BRAKE_DECEL = 12;
+const ROAD_ELEVATION = 0.16;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#b9ddff");
@@ -123,16 +127,23 @@ function setKey(code, pressed) {
 }
 
 function updateVehicle(dt) {
-  const accel = keys.forward ? 18 : 0;
-  const reverse = keys.back ? 14 : 0;
-  const brake = keys.brake ? 30 : 0;
-  const drag = 4.2 + state.speed * 0.025;
+  if (keys.forward) {
+    const speedRatio = THREE.MathUtils.clamp(state.speed / MAX_SPEED, 0, 1);
+    const acceleration = MAX_ACCEL * (1 - speedRatio ** 3);
+    state.speed += acceleration * dt;
+  }
 
-  state.speed += accel * dt;
-  state.speed -= reverse * dt;
-  state.speed -= Math.sign(state.speed) * Math.min(Math.abs(state.speed), brake * dt);
-  state.speed -= Math.sign(state.speed) * Math.min(Math.abs(state.speed), drag * dt);
-  state.speed = THREE.MathUtils.clamp(state.speed, 0, 36);
+  const brakingInput = keys.back || keys.brake;
+  if (brakingInput) {
+    state.speed -= BRAKE_DECEL * dt;
+  }
+
+  if (!keys.forward && !brakingInput) {
+    const rollingResistance = Math.min(state.speed, 1.8 * dt);
+    state.speed -= rollingResistance;
+  }
+
+  state.speed = THREE.MathUtils.clamp(state.speed, 0, MAX_SPEED);
 
   const steerInput = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
   const steerForce = 16 + state.speed * 0.25;
@@ -150,7 +161,7 @@ function updateVehicle(dt) {
   const right = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
 
   const carPosition = center.clone().addScaledVector(right, state.lateralOffset);
-  carPosition.y = getTerrainHeight(carPosition.x, carPosition.z) + 0.55;
+  carPosition.y = getTerrainHeight(carPosition.x, carPosition.z) + ROAD_ELEVATION + 0.47;
 
   car.group.position.copy(carPosition);
 
@@ -287,11 +298,11 @@ function createRoadMesh(zStart) {
 
     const leftEdge = center.clone().addScaledVector(right, -ROAD_WIDTH * 0.5);
     const rightEdge = center.clone().addScaledVector(right, ROAD_WIDTH * 0.5);
-    leftEdge.y = getTerrainHeight(leftEdge.x, leftEdge.z) + 0.08;
-    rightEdge.y = getTerrainHeight(rightEdge.x, rightEdge.z) + 0.08;
+    leftEdge.y = getTerrainHeight(leftEdge.x, leftEdge.z) + ROAD_ELEVATION;
+    rightEdge.y = getTerrainHeight(rightEdge.x, rightEdge.z) + ROAD_ELEVATION;
 
     strip.push(leftEdge, rightEdge);
-    lanePoints.push(center.x, getTerrainHeight(center.x, center.z) + 0.12, center.z);
+    lanePoints.push(center.x, getTerrainHeight(center.x, center.z) + ROAD_ELEVATION + 0.03, center.z);
   }
 
   const roadGeometry = new THREE.BufferGeometry();
@@ -347,8 +358,8 @@ function createShoulderStrip(zStart, direction) {
 
     const inner = center.clone().addScaledVector(right, innerOffset);
     const outer = center.clone().addScaledVector(right, outerOffset);
-    inner.y = getTerrainHeight(inner.x, inner.z) + 0.03;
-    outer.y = getTerrainHeight(outer.x, outer.z) + 0.02;
+    inner.y = getTerrainHeight(inner.x, inner.z) + ROAD_ELEVATION - 0.02;
+    outer.y = getTerrainHeight(outer.x, outer.z) + 0.03;
 
     vertices.push(inner.x, inner.y, inner.z, outer.x, outer.y, outer.z);
   }
@@ -492,9 +503,15 @@ function getTerrainHeight(x, z) {
   const valley = -Math.pow(Math.abs(x) / 170, 2) * 1.4;
   const roadCenter = getRoadCenter(z).x;
   const roadDistance = Math.abs(x - roadCenter);
-  const roadFlatten = -Math.max(0, 1 - roadDistance / 18) * 3.8;
+  const roadBlend = smoothstep(THREE.MathUtils.clamp(1 - roadDistance / (ROAD_WIDTH * 0.95), 0, 1));
+  const shoulderBlend = smoothstep(
+    THREE.MathUtils.clamp(1 - roadDistance / (ROAD_WIDTH * 0.95 + SHOULDER_WIDTH * 1.2), 0, 1)
+  );
+  const terrainBase = broad + detail + valley - 5.5;
+  const roadBase = broad * 0.08 + detail * 0.12 + valley * 0.35 - 5.9;
+  const blended = THREE.MathUtils.lerp(terrainBase, roadBase, roadBlend);
 
-  return broad + detail + valley + roadFlatten - 5.5;
+  return THREE.MathUtils.lerp(blended, blended + 0.25, shoulderBlend);
 }
 
 function fractalNoise(x, z, octaves, persistence) {

@@ -3,29 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Asphra</title>
-    <style>
-      html, body { margin: 0; overflow: hidden; background: #000; }
-      #hud {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        color: #e8f1ff;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 12px;
-        line-height: 1.4;
-        background: rgba(10,15,25,0.35);
-        border: 1px solid rgba(180,210,255,0.25);
-        border-radius: 8px;
-        padding: 8px 10px;
-        white-space: pre;
-        pointer-events: none;
-        user-select: none;
-      }
-    </style>
+    <title>Slow Roads Simulator</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div id="hud"></div>
-    <script type="module" src="/src/main.js"></script>
+    <div class="hud">
+      <div class="hud__title">Slow Roads Simulator</div>
+      <div class="hud__text">W / Up: accelerate</div>
+      <div class="hud__text">S / Down: brake</div>
+      <div class="hud__text">A D / Left Right: steer</div>
+      <div class="hud__text">Space: handbrake</div>
+      <div class="hud__text" id="speed">0 km/h</div>
+    </div>
+    <div class="credits">Procedural terrain, endless road, Three.js</div>
+    <script type="module" src="./main.js"></script>
   </body>
-</html>
+  </html>

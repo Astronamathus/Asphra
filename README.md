@@ -1,78 +1,49 @@
 # Asphra
 
-Asphra is a browser-based 3D driving prototype built using the Three.js library. The project demonstrates fundamental concepts in real-time rendering, camera systems, and physics-inspired vehicle movement.
+Asphra is now set up as a Vite + Three.js project focused on a high-quality world pass:
 
-## Features
+- continuous ribbon-style procedural road
+- rolling terrain updates around the player
+- cinematic rear camera rig
+- keyboard vehicle placeholder for world/camera iteration
 
-* 3D scene rendering using Three.js
-* Player-controlled vehicle with smooth steering
-* Acceleration and deceleration system with friction
-* Third-person follow camera with smoothing
-* Basic road and lane visualization
-* Modular code structure for scalability
+## Run
 
-## Project Structure
-
-```
-.
-├── index.html     # Entry point
-├── main.js        # Scene setup and animation loop
-├── car.js         # Vehicle movement and controls
-├── camera.js      # Camera follow system
-├── road.js        # Road creation logic
+```bash
+npm install
+npm run dev
 ```
 
-## Getting Started
+Then open the local Vite URL (usually `http://localhost:5173`).
 
-### Option 1: Run locally (recommended)
+### Fallback: run without npm (CDN import map)
 
-Due to browser security restrictions, it is recommended to run the project using a local server.
+If package install is blocked in your environment, you can open `index.html` directly in a modern browser.
+The file includes an import map that resolves `three` from jsDelivr.
 
-#### Using Python
+## Build
 
-1. Open a terminal in the project directory
-2. Run the following command:
-
+```bash
+npm run build
+npm run preview
 ```
-python3 -m http.server
-```
-
-3. Open your browser and navigate to:
-
-```
-http://localhost:8000
-```
-
----
-
-### Option 2: Open directly
-
-You may open `index.html` directly in a browser, but some features may not work correctly depending on your browser’s security settings.
 
 ## Controls
 
-* Arrow Up: Accelerate
-* Arrow Down: Brake / Reverse
-* Arrow Left: Turn left
-* Arrow Right: Turn right
+- `W` / `↑`: throttle
+- `S` / `↓`: brake / reverse
+- `A` / `←`: steer left
+- `D` / `→`: steer right
 
-## Technologies Used
+## Project Structure
 
-* JavaScript
-* Three.js (via CDN)
-
-## Future Improvements
-
-* Infinite procedural road generation
-* Curved and branching roads
-* Collision detection and boundaries
-* Vehicle model replacement
-* UI and HUD elements
-
-## License
-
-This project is open source. You may use, modify, and distribute it under the terms of the chosen license.
-
-## Acknowledgements
-
-* Three.js for providing a powerful and accessible 3D rendering library
+```text
+src/
+  main.js
+  core/math.js
+  camera/CameraRig.js
+  vehicle/VehicleController.js
+  world/RoadSystem.js
+  world/TerrainSystem.js
+  world/noise.js
+```

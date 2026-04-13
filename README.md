@@ -16,11 +16,6 @@ npm run dev
 
 Then open the local Vite URL (usually `http://localhost:5173`).
 
-### Fallback: run without npm (CDN import map)
-
-If package install is blocked in your environment, you can open `index.html` directly in a modern browser.
-The file includes an import map that resolves `three` from jsDelivr.
-
 ## Build
 
 ```bash

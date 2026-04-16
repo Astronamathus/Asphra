@@ -4,18 +4,13 @@ const CHUNK_LENGTH = 120;
 const CHUNK_WIDTH = 240;
 const CHUNK_RES_X = 40;
 const CHUNK_RES_Z = 48;
-const ROAD_WIDTH = 12;
-const SHOULDER_WIDTH = 4;
 const DRAW_DISTANCE = 6;
-const TREE_COUNT = 34;
-const TERRAIN_SEED = 187.31;
 
 const MAX_ACCEL = 7;
 const BRAKE_DECEL = 12;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#b9ddff");
-scene.fog = new THREE.Fog("#d2e7ef", 100, 540);
 
 const camera = new THREE.PerspectiveCamera(
   68,
@@ -25,21 +20,10 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-const ambient = new THREE.HemisphereLight("#fff8e8", "#5b7b63", 1.7);
-scene.add(ambient);
-
-const sun = new THREE.DirectionalLight("#fff0cf", 1.9);
-sun.position.set(-80, 120, -40);
-sun.castShadow = true;
-scene.add(sun);
-
-const roadMaterial = new THREE.MeshStandardMaterial({ color: "#3f454a" });
-const shoulderMaterial = new THREE.MeshStandardMaterial({ color: "#b8a17a" });
+scene.add(new THREE.HemisphereLight("#fff8e8", "#5b7b63", 1.7));
 
 const chunkStore = new Map();
 
@@ -51,25 +35,22 @@ const keys = {
   brake: false
 };
 
-const speedEl = document.querySelector("#speed");
 const clock = new THREE.Clock();
+const speedEl = document.querySelector("#speed");
 
-const car = createCar();
-scene.add(car.group);
-
-// 🔥 NEW STATE (free movement)
+// 🚗 FREE MOVEMENT STATE
 const state = {
   position: new THREE.Vector3(0, 2, 0),
-  velocity: new THREE.Vector3(),
   speed: 0,
   heading: 0
 };
 
-const cameraTarget = new THREE.Vector3();
+const car = createCar();
+scene.add(car.group);
 
+window.addEventListener("keydown", e => setKey(e.code, true));
+window.addEventListener("keyup", e => setKey(e.code, false));
 window.addEventListener("resize", onResize);
-window.addEventListener("keydown", (e) => setKey(e.code, true));
-window.addEventListener("keyup", (e) => setKey(e.code, false));
 
 animate();
 
@@ -79,8 +60,8 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.033);
 
   updateVehicle(dt);
-  updateChunks();
   updateCamera(dt);
+  updateChunks();
 
   renderer.render(scene, camera);
 }
@@ -98,58 +79,56 @@ function setKey(code, pressed) {
 // ================= VEHICLE =================
 
 function updateVehicle(dt) {
-  // acceleration
   if (keys.forward) state.speed += MAX_ACCEL * dt;
   if (keys.back) state.speed -= MAX_ACCEL * dt;
 
-  // braking
   if (keys.brake) {
     if (state.speed > 0) state.speed -= BRAKE_DECEL * dt;
     else state.speed += BRAKE_DECEL * dt;
   }
 
-  // friction
   if (!keys.forward && !keys.back && !keys.brake) {
-    state.speed *= 0.98;
+    state.speed *= 0.985;
   }
 
-  // speed cap (~230 km/h)
   const MAX_FORWARD = 230 / 3.6;
   const MAX_REVERSE = -40 / 3.6;
   state.speed = THREE.MathUtils.clamp(state.speed, MAX_REVERSE, MAX_FORWARD);
 
-  // steering
   const steerInput = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  const steerStrength = 1.8 * (state.speed / MAX_FORWARD);
-  state.heading -= steerInput * steerStrength * dt;
 
-  // movement
+  const steerFactor =
+    2.2 * (1 - Math.min(Math.abs(state.speed) / MAX_FORWARD, 1));
+
+  state.heading -= steerInput * steerFactor * dt;
+
   const forward = new THREE.Vector3(
     Math.sin(state.heading),
     0,
     Math.cos(state.heading)
   );
 
-  state.velocity.copy(forward).multiplyScalar(state.speed);
-  state.position.addScaledVector(state.velocity, dt);
+  state.position.addScaledVector(forward, state.speed * dt);
 
-  // terrain height
   const groundY = getTerrainHeight(state.position.x, state.position.z);
   state.position.y = groundY + 0.6;
 
-  // apply transform
   car.group.position.copy(state.position);
   car.group.rotation.set(0, state.heading, 0);
 
-  // wheels
-  const wheelSpin = state.speed * dt * 2;
+  const spin = state.speed * dt * 2;
   for (const wheel of car.wheels) {
-    wheel.rotation.x -= wheelSpin;
+    wheel.rotation.x -= spin;
   }
 
+  // 🔥 REAR WHEEL STEERING
   const steerAngle = steerInput * 0.5;
-  car.frontLeftPivot.rotation.y = steerAngle;
-  car.frontRightPivot.rotation.y = steerAngle;
+
+  car.frontLeftPivot.rotation.y = 0;
+  car.frontRightPivot.rotation.y = 0;
+
+  car.rearLeftPivot.rotation.y = steerAngle;
+  car.rearRightPivot.rotation.y = steerAngle;
 
   speedEl.textContent = `${Math.round(Math.abs(state.speed) * 3.6)} km/h`;
 }
@@ -163,12 +142,12 @@ function updateCamera(dt) {
     Math.cos(state.heading)
   );
 
-  cameraTarget
-    .copy(state.position)
+  const target = state.position
+    .clone()
     .addScaledVector(forward, -12)
     .add(new THREE.Vector3(0, 6, 0));
 
-  camera.position.lerp(cameraTarget, 1 - Math.pow(0.001, dt));
+  camera.position.lerp(target, 1 - Math.pow(0.001, dt));
 
   const look = state.position.clone().addScaledVector(forward, 15);
   look.y += 2;
@@ -185,25 +164,14 @@ function updateChunks() {
     if (!chunkStore.has(i)) {
       const chunk = buildChunk(i);
       chunkStore.set(i, chunk);
-      scene.add(chunk.group);
+      scene.add(chunk);
     }
   }
 }
 
-// ================= WORLD =================
-
 function buildChunk(index) {
   const zStart = index * CHUNK_LENGTH;
-  const group = new THREE.Group();
 
-  const terrain = createTerrainMesh(zStart);
-  const road = createRoadMesh(zStart);
-
-  group.add(terrain, road);
-  return { group };
-}
-
-function createTerrainMesh(zStart) {
   const geo = new THREE.PlaneGeometry(
     CHUNK_WIDTH,
     CHUNK_LENGTH,
@@ -223,18 +191,12 @@ function createTerrainMesh(zStart) {
 
   geo.computeVertexNormals();
 
-  return new THREE.Mesh(
+  const mesh = new THREE.Mesh(
     geo,
     new THREE.MeshStandardMaterial({ color: "#6fa36f" })
   );
-}
 
-function createRoadMesh(zStart) {
-  const geo = new THREE.PlaneGeometry(ROAD_WIDTH, CHUNK_LENGTH, 1, 20);
-  geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.05, zStart + CHUNK_LENGTH / 2);
-
-  return new THREE.Mesh(geo, roadMaterial);
+  return mesh;
 }
 
 // ================= CAR =================
@@ -250,32 +212,43 @@ function createCar() {
   group.add(body);
 
   const wheels = [];
-  const pivots = [];
 
-  for (let x of [-1, 1]) {
-    for (let z of [-1.5, 1.5]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(x, 0.4, z);
+  const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: "#222" });
 
-      const wheel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16),
-        new THREE.MeshStandardMaterial({ color: "#222" })
-      );
-      wheel.rotation.z = Math.PI / 2;
+  const frontLeftPivot = new THREE.Group();
+  const frontRightPivot = new THREE.Group();
+  const rearLeftPivot = new THREE.Group();
+  const rearRightPivot = new THREE.Group();
 
-      pivot.add(wheel);
-      group.add(pivot);
+  frontLeftPivot.position.set(-1, 0.4, -1.5);
+  frontRightPivot.position.set(1, 0.4, -1.5);
+  rearLeftPivot.position.set(-1, 0.4, 1.5);
+  rearRightPivot.position.set(1, 0.4, 1.5);
 
-      wheels.push(wheel);
-      pivots.push(pivot);
-    }
+  group.add(frontLeftPivot, frontRightPivot, rearLeftPivot, rearRightPivot);
+
+  const pivots = [
+    frontLeftPivot,
+    frontRightPivot,
+    rearLeftPivot,
+    rearRightPivot
+  ];
+
+  for (const pivot of pivots) {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    pivot.add(wheel);
+    wheels.push(wheel);
   }
 
   return {
     group,
     wheels,
-    frontLeftPivot: pivots[0],
-    frontRightPivot: pivots[1]
+    frontLeftPivot,
+    frontRightPivot,
+    rearLeftPivot,
+    rearRightPivot
   };
 }
 

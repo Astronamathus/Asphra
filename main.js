@@ -9,10 +9,9 @@ const SHOULDER_WIDTH = 4;
 const DRAW_DISTANCE = 6;
 const TREE_COUNT = 34;
 const TERRAIN_SEED = 187.31;
-const MAX_SPEED = 64;
+
 const MAX_ACCEL = 7;
 const BRAKE_DECEL = 12;
-const ROAD_ELEVATION = 0.16;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#b9ddff");
@@ -29,7 +28,6 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const ambient = new THREE.HemisphereLight("#fff8e8", "#5b7b63", 1.7);
@@ -38,44 +36,12 @@ scene.add(ambient);
 const sun = new THREE.DirectionalLight("#fff0cf", 1.9);
 sun.position.set(-80, 120, -40);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 320;
-sun.shadow.camera.left = -120;
-sun.shadow.camera.right = 120;
-sun.shadow.camera.top = 120;
-sun.shadow.camera.bottom = -120;
 scene.add(sun);
 
-const sunGlow = new THREE.Mesh(
-  new THREE.SphereGeometry(14, 24, 24),
-  new THREE.MeshBasicMaterial({ color: "#fff3b0", transparent: true, opacity: 0.35 })
-);
-sunGlow.position.set(-150, 120, -210);
-scene.add(sunGlow);
-
-const roadMaterial = new THREE.MeshStandardMaterial({
-  color: "#3f454a",
-  roughness: 1,
-  metalness: 0
-});
-
-const shoulderMaterial = new THREE.MeshStandardMaterial({
-  color: "#b8a17a",
-  roughness: 1
-});
-
-const laneMaterial = new THREE.LineDashedMaterial({
-  color: "#f8f3d2",
-  dashSize: 4,
-  gapSize: 3
-});
+const roadMaterial = new THREE.MeshStandardMaterial({ color: "#3f454a" });
+const shoulderMaterial = new THREE.MeshStandardMaterial({ color: "#b8a17a" });
 
 const chunkStore = new Map();
-const treeTrunkGeometry = new THREE.CylinderGeometry(0.25, 0.35, 2.8, 6);
-const treeCrownGeometry = new THREE.ConeGeometry(1.5, 3.6, 7);
-const trunkMaterial = new THREE.MeshStandardMaterial({ color: "#6a4a33", roughness: 1 });
-const crownMaterial = new THREE.MeshStandardMaterial({ color: "#527f4d", roughness: 1 });
 
 const keys = {
   forward: false,
@@ -91,19 +57,19 @@ const clock = new THREE.Clock();
 const car = createCar();
 scene.add(car.group);
 
+// 🔥 NEW STATE (free movement)
 const state = {
-  distance: 0,
+  position: new THREE.Vector3(0, 2, 0),
+  velocity: new THREE.Vector3(),
   speed: 0,
-  lateralOffset: 0,
-  lateralVelocity: 0
+  heading: 0
 };
 
 const cameraTarget = new THREE.Vector3();
-const cameraLook = new THREE.Vector3();
 
 window.addEventListener("resize", onResize);
-window.addEventListener("keydown", (event) => setKey(event.code, true));
-window.addEventListener("keyup", (event) => setKey(event.code, false));
+window.addEventListener("keydown", (e) => setKey(e.code, true));
+window.addEventListener("keyup", (e) => setKey(e.code, false));
 
 animate();
 
@@ -111,12 +77,15 @@ function animate() {
   requestAnimationFrame(animate);
 
   const dt = Math.min(clock.getDelta(), 0.033);
+
   updateVehicle(dt);
   updateChunks();
   updateCamera(dt);
 
   renderer.render(scene, camera);
 }
+
+// ================= INPUT =================
 
 function setKey(code, pressed) {
   if (code === "KeyW" || code === "ArrowUp") keys.forward = pressed;
@@ -126,100 +95,102 @@ function setKey(code, pressed) {
   if (code === "Space") keys.brake = pressed;
 }
 
+// ================= VEHICLE =================
+
 function updateVehicle(dt) {
-  if (keys.forward) {
-    const speedRatio = THREE.MathUtils.clamp(state.speed / MAX_SPEED, 0, 1);
-    const acceleration = MAX_ACCEL * (1 - speedRatio ** 3);
-    state.speed += acceleration * dt;
+  // acceleration
+  if (keys.forward) state.speed += MAX_ACCEL * dt;
+  if (keys.back) state.speed -= MAX_ACCEL * dt;
+
+  // braking
+  if (keys.brake) {
+    if (state.speed > 0) state.speed -= BRAKE_DECEL * dt;
+    else state.speed += BRAKE_DECEL * dt;
   }
 
-  const brakingInput = keys.back || keys.brake;
-  if (brakingInput) {
-    state.speed -= BRAKE_DECEL * dt;
+  // friction
+  if (!keys.forward && !keys.back && !keys.brake) {
+    state.speed *= 0.98;
   }
 
-  if (!keys.forward && !brakingInput) {
-    const rollingResistance = Math.min(state.speed, 1.8 * dt);
-    state.speed -= rollingResistance;
-  }
+  // speed cap (~230 km/h)
+  const MAX_FORWARD = 230 / 3.6;
+  const MAX_REVERSE = -40 / 3.6;
+  state.speed = THREE.MathUtils.clamp(state.speed, MAX_REVERSE, MAX_FORWARD);
 
-  state.speed = THREE.MathUtils.clamp(state.speed, 0, MAX_SPEED);
-
+  // steering
   const steerInput = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  const steerForce = 16 + state.speed * 0.25;
-  const edgeLimit = ROAD_WIDTH * 0.64;
-  state.lateralVelocity += steerInput * steerForce * dt;
-  state.lateralVelocity -= state.lateralOffset * 2.1 * dt;
-  state.lateralVelocity *= 0.9;
-  state.lateralOffset += state.lateralVelocity * dt;
-  state.lateralOffset = THREE.MathUtils.clamp(state.lateralOffset, -edgeLimit, edgeLimit);
+  const steerStrength = 1.8 * (state.speed / MAX_FORWARD);
+  state.heading -= steerInput * steerStrength * dt;
 
-  state.distance += state.speed * dt * 10.5;
+  // movement
+  const forward = new THREE.Vector3(
+    Math.sin(state.heading),
+    0,
+    Math.cos(state.heading)
+  );
 
-  const center = getRoadCenter(state.distance);
-  const tangent = getRoadTangent(state.distance);
-  const right = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+  state.velocity.copy(forward).multiplyScalar(state.speed);
+  state.position.addScaledVector(state.velocity, dt);
 
-  const carPosition = center.clone().addScaledVector(right, state.lateralOffset);
-  carPosition.y = getTerrainHeight(carPosition.x, carPosition.z) + ROAD_ELEVATION + 0.47;
+  // terrain height
+  const groundY = getTerrainHeight(state.position.x, state.position.z);
+  state.position.y = groundY + 0.6;
 
-  car.group.position.copy(carPosition);
+  // apply transform
+  car.group.position.copy(state.position);
+  car.group.rotation.set(0, state.heading, 0);
 
-  const heading = Math.atan2(tangent.x, tangent.z);
-  const drift = THREE.MathUtils.clamp(-state.lateralVelocity * 0.02, -0.18, 0.18);
-  car.group.rotation.set(0, heading + drift, 0);
-
-  const wheelSpin = state.speed * dt * 1.8;
+  // wheels
+  const wheelSpin = state.speed * dt * 2;
   for (const wheel of car.wheels) {
     wheel.rotation.x -= wheelSpin;
   }
 
-  const steerYaw = steerInput * 0.35;
-  car.frontLeftPivot.rotation.y = steerYaw;
-  car.frontRightPivot.rotation.y = steerYaw;
+  const steerAngle = steerInput * 0.5;
+  car.frontLeftPivot.rotation.y = steerAngle;
+  car.frontRightPivot.rotation.y = steerAngle;
 
-  speedEl.textContent = `${Math.round(state.speed * 6.4)} km/h`;
+  speedEl.textContent = `${Math.round(Math.abs(state.speed) * 3.6)} km/h`;
 }
 
+// ================= CAMERA =================
+
 function updateCamera(dt) {
-  const tangent = getRoadTangent(state.distance);
-  const right = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+  const forward = new THREE.Vector3(
+    Math.sin(state.heading),
+    0,
+    Math.cos(state.heading)
+  );
 
   cameraTarget
-    .copy(car.group.position)
-    .addScaledVector(tangent, -18)
-    .addScaledVector(right, state.lateralOffset * 0.1)
-    .add(new THREE.Vector3(0, 7.5, 0));
+    .copy(state.position)
+    .addScaledVector(forward, -12)
+    .add(new THREE.Vector3(0, 6, 0));
 
   camera.position.lerp(cameraTarget, 1 - Math.pow(0.001, dt));
 
-  cameraLook
-    .copy(car.group.position)
-    .addScaledVector(tangent, 22)
-    .add(new THREE.Vector3(0, 2.5, 0));
+  const look = state.position.clone().addScaledVector(forward, 15);
+  look.y += 2;
 
-  camera.lookAt(cameraLook);
+  camera.lookAt(look);
 }
 
-function updateChunks() {
-  const currentChunk = Math.floor(state.distance / CHUNK_LENGTH);
+// ================= CHUNKS =================
 
-  for (let i = currentChunk - 1; i <= currentChunk + DRAW_DISTANCE; i += 1) {
+function updateChunks() {
+  const currentChunk = Math.floor(state.position.z / CHUNK_LENGTH);
+
+  for (let i = currentChunk - 2; i <= currentChunk + DRAW_DISTANCE; i++) {
     if (!chunkStore.has(i)) {
       const chunk = buildChunk(i);
       chunkStore.set(i, chunk);
       scene.add(chunk.group);
     }
   }
-
-  for (const [index, chunk] of chunkStore.entries()) {
-    if (index < currentChunk - 2 || index > currentChunk + DRAW_DISTANCE + 1) {
-      scene.remove(chunk.group);
-      disposeChunk(chunk);
-      chunkStore.delete(index);
-    }
-  }
 }
+
+// ================= WORLD =================
 
 function buildChunk(index) {
   const zStart = index * CHUNK_LENGTH;
@@ -227,356 +198,94 @@ function buildChunk(index) {
 
   const terrain = createTerrainMesh(zStart);
   const road = createRoadMesh(zStart);
-  const shoulders = createShoulderMesh(zStart);
-  const trees = createTrees(zStart);
 
-  group.add(terrain, shoulders.left, shoulders.right, road.mesh, road.lane, trees.trunks, trees.crowns);
-
-  return { group, meshes: [terrain, shoulders.left, shoulders.right, road.mesh, road.lane, trees.trunks, trees.crowns] };
+  group.add(terrain, road);
+  return { group };
 }
 
 function createTerrainMesh(zStart) {
-  const geometry = new THREE.PlaneGeometry(
+  const geo = new THREE.PlaneGeometry(
     CHUNK_WIDTH,
     CHUNK_LENGTH,
     CHUNK_RES_X,
     CHUNK_RES_Z
   );
-  geometry.rotateX(-Math.PI / 2);
-  geometry.translate(0, 0, zStart + CHUNK_LENGTH * 0.5);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0, zStart + CHUNK_LENGTH / 2);
 
-  const position = geometry.attributes.position;
-  const colors = [];
-  const color = new THREE.Color();
+  const pos = geo.attributes.position;
 
-  for (let i = 0; i < position.count; i += 1) {
-    const x = position.getX(i);
-    const z = position.getZ(i);
-    const y = getTerrainHeight(x, z);
-    position.setY(i, y);
-
-    const hillMix = THREE.MathUtils.clamp((y + 6) / 20, 0, 1);
-    color.setRGB(
-      THREE.MathUtils.lerp(0.22, 0.48, hillMix),
-      THREE.MathUtils.lerp(0.43, 0.62, hillMix),
-      THREE.MathUtils.lerp(0.18, 0.33, hillMix)
-    );
-
-    const dryPatch = fractalNoise(x * 0.02, z * 0.02, 2, 0.5);
-    if (dryPatch > 0.62) {
-      color.offsetHSL(-0.03, -0.05, 0.08);
-    }
-
-    colors.push(color.r, color.g, color.b);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    pos.setY(i, getTerrainHeight(x, z));
   }
 
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  geometry.computeVertexNormals();
+  geo.computeVertexNormals();
 
-  const material = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 1,
-    metalness: 0
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.receiveShadow = true;
-  return mesh;
+  return new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ color: "#6fa36f" })
+  );
 }
 
 function createRoadMesh(zStart) {
-  const segments = 28;
-  const strip = [];
-  const lanePoints = [];
+  const geo = new THREE.PlaneGeometry(ROAD_WIDTH, CHUNK_LENGTH, 1, 20);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.05, zStart + CHUNK_LENGTH / 2);
 
-  for (let i = 0; i <= segments; i += 1) {
-    const t = i / segments;
-    const z = zStart + t * CHUNK_LENGTH;
-    const center = getRoadCenter(z);
-    const tangent = getRoadTangent(z);
-    const right = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-
-    const leftEdge = center.clone().addScaledVector(right, -ROAD_WIDTH * 0.5);
-    const rightEdge = center.clone().addScaledVector(right, ROAD_WIDTH * 0.5);
-    leftEdge.y = getTerrainHeight(leftEdge.x, leftEdge.z) + ROAD_ELEVATION;
-    rightEdge.y = getTerrainHeight(rightEdge.x, rightEdge.z) + ROAD_ELEVATION;
-
-    strip.push(leftEdge, rightEdge);
-    lanePoints.push(center.x, getTerrainHeight(center.x, center.z) + ROAD_ELEVATION + 0.03, center.z);
-  }
-
-  const roadGeometry = new THREE.BufferGeometry();
-  const roadVertices = [];
-  const indices = [];
-
-  for (const point of strip) {
-    roadVertices.push(point.x, point.y, point.z);
-  }
-
-  for (let i = 0; i < segments; i += 1) {
-    const a = i * 2;
-    const b = a + 1;
-    const c = a + 2;
-    const d = a + 3;
-    indices.push(a, c, b, b, c, d);
-  }
-
-  roadGeometry.setAttribute("position", new THREE.Float32BufferAttribute(roadVertices, 3));
-  roadGeometry.setIndex(indices);
-  roadGeometry.computeVertexNormals();
-
-  const mesh = new THREE.Mesh(roadGeometry, roadMaterial);
-  mesh.receiveShadow = true;
-
-  const laneGeometry = new THREE.BufferGeometry();
-  laneGeometry.setAttribute("position", new THREE.Float32BufferAttribute(lanePoints, 3));
-  const lane = new THREE.Line(laneGeometry, laneMaterial);
-  lane.computeLineDistances();
-
-  return { mesh, lane };
+  return new THREE.Mesh(geo, roadMaterial);
 }
 
-function createShoulderMesh(zStart) {
-  const left = createShoulderStrip(zStart, -1);
-  const right = createShoulderStrip(zStart, 1);
-  return { left, right };
-}
-
-function createShoulderStrip(zStart, direction) {
-  const segments = 28;
-  const vertices = [];
-  const indices = [];
-
-  for (let i = 0; i <= segments; i += 1) {
-    const z = zStart + (i / segments) * CHUNK_LENGTH;
-    const center = getRoadCenter(z);
-    const tangent = getRoadTangent(z);
-    const right = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-
-    const innerOffset = direction * ROAD_WIDTH * 0.5;
-    const outerOffset = direction * (ROAD_WIDTH * 0.5 + SHOULDER_WIDTH);
-
-    const inner = center.clone().addScaledVector(right, innerOffset);
-    const outer = center.clone().addScaledVector(right, outerOffset);
-    inner.y = getTerrainHeight(inner.x, inner.z) + ROAD_ELEVATION - 0.02;
-    outer.y = getTerrainHeight(outer.x, outer.z) + 0.03;
-
-    vertices.push(inner.x, inner.y, inner.z, outer.x, outer.y, outer.z);
-  }
-
-  for (let i = 0; i < segments; i += 1) {
-    const a = i * 2;
-    const b = a + 1;
-    const c = a + 2;
-    const d = a + 3;
-    indices.push(a, c, b, b, c, d);
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-
-  const mesh = new THREE.Mesh(geometry, shoulderMaterial);
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-function createTrees(zStart) {
-  const trunkMesh = new THREE.InstancedMesh(treeTrunkGeometry, trunkMaterial, TREE_COUNT);
-  const crownMesh = new THREE.InstancedMesh(treeCrownGeometry, crownMaterial, TREE_COUNT);
-  const dummy = new THREE.Object3D();
-  let count = 0;
-
-  for (let i = 0; i < TREE_COUNT; i += 1) {
-    const z = zStart + pseudoRandom(zStart * 0.07 + i * 13.1) * CHUNK_LENGTH;
-    const center = getRoadCenter(z);
-    const tangent = getRoadTangent(z);
-    const right = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const side = pseudoRandom(zStart * 0.13 + i * 9.7) > 0.5 ? 1 : -1;
-    const spread = ROAD_WIDTH * 0.8 + 8 + pseudoRandom(zStart * 0.19 + i * 4.3) * 70;
-    const lateral = side * spread;
-    const x = center.x + right.x * lateral;
-    const worldZ = center.z + right.z * lateral;
-    const y = getTerrainHeight(x, worldZ);
-
-    if (Math.abs(lateral) < ROAD_WIDTH * 1.3) {
-      continue;
-    }
-
-    const scale = 0.8 + pseudoRandom(zStart * 0.23 + i * 2.1) * 1.35;
-    const yaw = pseudoRandom(zStart * 0.31 + i * 5.6) * Math.PI * 2;
-
-    dummy.position.set(x, y + 1.35 * scale, worldZ);
-    dummy.rotation.set(0, yaw, 0);
-    dummy.scale.setScalar(scale);
-    dummy.updateMatrix();
-    trunkMesh.setMatrixAt(count, dummy.matrix);
-
-    dummy.position.set(x, y + 4.1 * scale, worldZ);
-    dummy.rotation.set(0, yaw, 0);
-    dummy.scale.setScalar(scale);
-    dummy.updateMatrix();
-    crownMesh.setMatrixAt(count, dummy.matrix);
-    count += 1;
-  }
-
-  trunkMesh.count = count;
-  crownMesh.count = count;
-  trunkMesh.instanceMatrix.needsUpdate = true;
-  crownMesh.instanceMatrix.needsUpdate = true;
-  trunkMesh.castShadow = true;
-  crownMesh.castShadow = true;
-  trunkMesh.receiveShadow = true;
-  crownMesh.receiveShadow = true;
-
-  return { trunks: trunkMesh, crowns: crownMesh };
-}
+// ================= CAR =================
 
 function createCar() {
   const group = new THREE.Group();
 
-  const chassis = new THREE.Mesh(
-    new THREE.BoxGeometry(1.9, 0.8, 4.1),
-    new THREE.MeshStandardMaterial({ color: "#d4684c", roughness: 0.7, metalness: 0.1 })
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 1, 4),
+    new THREE.MeshStandardMaterial({ color: "red" })
   );
-  chassis.position.y = 1.2;
-  chassis.castShadow = true;
-  group.add(chassis);
-
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.45, 0.8, 1.8),
-    new THREE.MeshStandardMaterial({ color: "#f2f2f2", roughness: 0.4, metalness: 0.05 })
-  );
-  cabin.position.set(0, 1.85, -0.1);
-  cabin.castShadow = true;
-  group.add(cabin);
+  body.position.y = 1;
+  group.add(body);
 
   const wheels = [];
-  const wheelGeometry = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 16);
-  wheelGeometry.rotateZ(Math.PI * 0.5);
-  const wheelMaterial = new THREE.MeshStandardMaterial({ color: "#1f2125", roughness: 1 });
+  const pivots = [];
 
-  const frontLeftPivot = new THREE.Group();
-  const frontRightPivot = new THREE.Group();
-  frontLeftPivot.position.set(-1.02, 0.55, -1.22);
-  frontRightPivot.position.set(1.02, 0.55, -1.22);
-  group.add(frontLeftPivot, frontRightPivot);
+  for (let x of [-1, 1]) {
+    for (let z of [-1.5, 1.5]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, 0.4, z);
 
-  const frontLeftWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-  const frontRightWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-  frontLeftWheel.castShadow = true;
-  frontRightWheel.castShadow = true;
-  frontLeftPivot.add(frontLeftWheel);
-  frontRightPivot.add(frontRightWheel);
-  wheels.push(frontLeftWheel, frontRightWheel);
+      const wheel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16),
+        new THREE.MeshStandardMaterial({ color: "#222" })
+      );
+      wheel.rotation.z = Math.PI / 2;
 
-  const rearLeftWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-  const rearRightWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-  rearLeftWheel.position.set(-1.02, 0.55, 1.22);
-  rearRightWheel.position.set(1.02, 0.55, 1.22);
-  rearLeftWheel.castShadow = true;
-  rearRightWheel.castShadow = true;
-  group.add(rearLeftWheel, rearRightWheel);
-  wheels.push(rearLeftWheel, rearRightWheel);
+      pivot.add(wheel);
+      group.add(pivot);
 
-  return { group, wheels, frontLeftPivot, frontRightPivot };
-}
-
-function getRoadCenter(z) {
-  const x =
-    Math.sin(z * 0.0035) * 34 +
-    Math.sin(z * 0.0085 + 1.7) * 12 +
-    Math.sin(z * 0.014 + 5.1) * 4;
-  return new THREE.Vector3(x, 0, z);
-}
-
-function getRoadTangent(z) {
-  const sampleA = getRoadCenter(z - 0.5);
-  const sampleB = getRoadCenter(z + 0.5);
-  return sampleB.sub(sampleA).setY(0).normalize();
-}
-
-function getTerrainHeight(x, z) {
-  const broad = fractalNoise(x * 0.006 + TERRAIN_SEED, z * 0.006, 4, 0.5) * 22;
-  const detail = fractalNoise(x * 0.028, z * 0.028 + TERRAIN_SEED, 3, 0.55) * 2.2;
-  const valley = -Math.pow(Math.abs(x) / 170, 2) * 1.4;
-  const roadCenter = getRoadCenter(z).x;
-  const roadDistance = Math.abs(x - roadCenter);
-  const roadBlend = smoothstep(THREE.MathUtils.clamp(1 - roadDistance / (ROAD_WIDTH * 0.95), 0, 1));
-  const shoulderBlend = smoothstep(
-    THREE.MathUtils.clamp(1 - roadDistance / (ROAD_WIDTH * 0.95 + SHOULDER_WIDTH * 1.2), 0, 1)
-  );
-  const terrainBase = broad + detail + valley - 5.5;
-  const roadBase = broad * 0.08 + detail * 0.12 + valley * 0.35 - 5.9;
-  const blended = THREE.MathUtils.lerp(terrainBase, roadBase, roadBlend);
-
-  return THREE.MathUtils.lerp(blended, blended + 0.25, shoulderBlend);
-}
-
-function fractalNoise(x, z, octaves, persistence) {
-  let amplitude = 1;
-  let frequency = 1;
-  let total = 0;
-  let max = 0;
-
-  for (let i = 0; i < octaves; i += 1) {
-    total += smoothValueNoise(x * frequency, z * frequency) * amplitude;
-    max += amplitude;
-    amplitude *= persistence;
-    frequency *= 2;
-  }
-
-  return total / max;
-}
-
-function smoothValueNoise(x, z) {
-  const x0 = Math.floor(x);
-  const z0 = Math.floor(z);
-  const tx = smoothstep(x - x0);
-  const tz = smoothstep(z - z0);
-
-  const v00 = pseudoRandom2D(x0, z0);
-  const v10 = pseudoRandom2D(x0 + 1, z0);
-  const v01 = pseudoRandom2D(x0, z0 + 1);
-  const v11 = pseudoRandom2D(x0 + 1, z0 + 1);
-
-  const a = THREE.MathUtils.lerp(v00, v10, tx);
-  const b = THREE.MathUtils.lerp(v01, v11, tx);
-  return THREE.MathUtils.lerp(a, b, tz) * 2 - 1;
-}
-
-function smoothstep(t) {
-  return t * t * (3 - 2 * t);
-}
-
-function pseudoRandom2D(x, z) {
-  const value = Math.sin(x * 127.1 + z * 311.7 + TERRAIN_SEED * 19.19) * 43758.5453123;
-  return value - Math.floor(value);
-}
-
-function pseudoRandom(value) {
-  const r = Math.sin(value * 91.17 + 17.13) * 43758.5453123;
-  return r - Math.floor(r);
-}
-
-function disposeChunk(chunk) {
-  for (const mesh of chunk.meshes) {
-    if (mesh.geometry) mesh.geometry.dispose();
-    if (Array.isArray(mesh.material)) {
-      for (const material of mesh.material) material.dispose();
-    } else if (
-      mesh.material &&
-      mesh.material !== roadMaterial &&
-      mesh.material !== shoulderMaterial &&
-      mesh.material !== laneMaterial &&
-      mesh.material !== trunkMaterial &&
-      mesh.material !== crownMaterial
-    ) {
-      mesh.material.dispose();
+      wheels.push(wheel);
+      pivots.push(pivot);
     }
   }
+
+  return {
+    group,
+    wheels,
+    frontLeftPivot: pivots[0],
+    frontRightPivot: pivots[1]
+  };
 }
+
+// ================= TERRAIN =================
+
+function getTerrainHeight(x, z) {
+  return Math.sin(x * 0.01) * 2 + Math.cos(z * 0.01) * 2;
+}
+
+// ================= RESIZE =================
 
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;

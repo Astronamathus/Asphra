@@ -5,7 +5,7 @@ const CHUNK_WIDTH = 240;
 const CHUNK_RES_X = 40;
 const CHUNK_RES_Z = 48;
 const DRAW_DISTANCE = 6;
-
+//Acceleration rate limiter
 const MAX_ACCEL = 7;
 const BRAKE_DECEL = 12;
 
@@ -25,6 +25,7 @@ document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight("#fff8e8", "#5b7b63", 1.7));
 
+//Update chunks procedurally
 const chunkStore = new Map();
 
 const keys = {

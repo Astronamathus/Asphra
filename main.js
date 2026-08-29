@@ -204,6 +204,14 @@ function buildChunk(index) {
   return { group };
 }
 
+
+  const terrain = createTerrainMesh(zStart);
+  const road = createRoadMesh(zStart);
+
+  group.add(terrain, road);
+  return { group };
+}
+
 function createTerrainMesh(zStart) {
   const geo = new THREE.PlaneGeometry(
     CHUNK_WIDTH,
@@ -229,6 +237,12 @@ function createTerrainMesh(zStart) {
     new THREE.MeshStandardMaterial({ color: "#6fa36f" })
   );
 }
+
+function createRoadMesh(zStart) {
+  const geo = new THREE.PlaneGeometry(ROAD_WIDTH, CHUNK_LENGTH, 1, 20);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.05, zStart + CHUNK_LENGTH / 2);
+
 
 function createRoadMesh(zStart) {
   const geo = new THREE.PlaneGeometry(ROAD_WIDTH, CHUNK_LENGTH, 1, 20);
